@@ -140,7 +140,7 @@ def convert_target_to_binary(target_series, positive_class='spam'):
 
 
 def vectorize_text(X_train, X_test, method='tfidf', max_features=5000, 
-                  verbose=True, **kwargs):
+                  stop_words='english', verbose=True, **kwargs):
     """
     Vectorize text data using TF-IDF or Count Vectorizer.
     
@@ -154,6 +154,8 @@ def vectorize_text(X_train, X_test, method='tfidf', max_features=5000,
         'tfidf' or 'count'
     max_features : int
         Maximum number of features to extract
+    stop_words : str or list
+        'english' to use built-in stop words, or list of custom stop words, or None
     verbose : bool
         Whether to print information
     **kwargs : additional arguments to pass to vectorizer
@@ -161,7 +163,6 @@ def vectorize_text(X_train, X_test, method='tfidf', max_features=5000,
         - min_df: ignore terms with document frequency below threshold
         - max_df: ignore terms with document frequency above threshold
         - ngram_range: tuple (min_n, max_n) for n-gram range
-        - stop_words: 'english' or list of stop words
     
     Returns:
     --------
@@ -172,9 +173,9 @@ def vectorize_text(X_train, X_test, method='tfidf', max_features=5000,
     vectorizer : fitted vectorizer object
     """
     if method == 'tfidf':
-        vectorizer = TfidfVectorizer(max_features=max_features, **kwargs)
+        vectorizer = TfidfVectorizer(max_features=max_features, stop_words=stop_words, **kwargs)
     elif method == 'count':
-        vectorizer = CountVectorizer(max_features=max_features, **kwargs)
+        vectorizer = CountVectorizer(max_features=max_features, stop_words=stop_words, **kwargs)
     else:
         raise ValueError("method must be 'tfidf' or 'count'")
     
