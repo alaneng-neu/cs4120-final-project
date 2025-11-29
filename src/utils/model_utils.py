@@ -232,7 +232,7 @@ def test_phishing_examples(examples, vectorizer, classifier):
             print(f"  - {class_name}: {prob:.2%}")
 
 
-def save_model(model, vectorizer, model_name, models_dir='../models'):
+def save_model(model, vectorizer, model_name, models_dir='../../models'):
     """
     Save a trained model and its vectorizer.
     
@@ -265,7 +265,7 @@ def save_model(model, vectorizer, model_name, models_dir='../models'):
     return model_path, vectorizer_path
 
 
-def print_model_summary(model_name, df, y, X_train, X_test, train_accuracy, test_accuracy, models_dir='../models'):
+def print_model_summary(model_name, df, y, X_train, X_test, train_accuracy, test_accuracy, models_dir='../../models'):
     """
     Print a summary of the trained model.
     
