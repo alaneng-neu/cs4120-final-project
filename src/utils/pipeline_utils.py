@@ -360,3 +360,183 @@ def classify_batch(emails, spam_model, spam_vectorizer, phishing_model, phishing
         })
     
     return pd.DataFrame(results)
+
+
+def explain_spam_prediction(email_text, spam_model, spam_vectorizer, n_features=10):
+    """
+    Explain why an email was classified as spam or ham by showing the most influential words.
+    
+    Parameters:
+    -----------
+    email_text : str
+        The email text to explain
+    spam_model : MultinomialNB
+        Trained spam classifier
+    spam_vectorizer : TfidfVectorizer
+        Fitted vectorizer
+    n_features : int
+        Number of top features to show
+    
+    Returns:
+    --------
+    dict : Explanation with prediction, confidence, and top contributing features
+    """
+    # Get prediction
+    text_vec = spam_vectorizer.transform([email_text])
+    prediction = spam_model.predict(text_vec)[0]
+    probabilities = spam_model.predict_proba(text_vec)[0]
+    
+    # Get feature names and their values in the email
+    feature_names = spam_vectorizer.get_feature_names_out()
+    text_features = text_vec.toarray()[0]
+    
+    # Get non-zero features (words present in the email)
+    present_features = [(feature_names[i], text_features[i], i) 
+                       for i in range(len(text_features)) if text_features[i] > 0]
+    
+    # Get log probabilities for each class
+    log_probs = spam_model.feature_log_prob_
+    
+    # Calculate feature contributions
+    contributions = []
+    for word, tfidf, idx in present_features:
+        # Log probability ratio: positive means spam, negative means ham
+        log_ratio = log_probs[1][idx] - log_probs[0][idx]
+        # Weight by TF-IDF score
+        contribution = tfidf * log_ratio
+        contributions.append({
+            'word': word,
+            'tfidf': tfidf,
+            'log_prob_ratio': log_ratio,
+            'contribution': contribution,
+            'direction': 'SPAM' if log_ratio > 0 else 'HAM'
+        })
+    
+    # Sort by absolute contribution
+    contributions.sort(key=lambda x: abs(x['contribution']), reverse=True)
+    top_contributions = contributions[:n_features]
+    
+    # Calculate total contribution scores
+    spam_score = sum(c['contribution'] for c in contributions if c['contribution'] > 0)
+    ham_score = sum(abs(c['contribution']) for c in contributions if c['contribution'] < 0)
+    
+    return {
+        'prediction': 'SPAM' if prediction == 1 else 'HAM',
+        'spam_probability': probabilities[1],
+        'ham_probability': probabilities[0],
+        'confidence': max(probabilities),
+        'spam_score': spam_score,
+        'ham_score': ham_score,
+        'top_features': top_contributions,
+        'total_features_found': len(present_features)
+    }
+
+
+def display_spam_explanation(explanation, show_text=False, email_text=None):
+    """
+    Display a formatted explanation of a spam prediction showing which words influenced the decision.
+    
+    Parameters:
+    -----------
+    explanation : dict
+        Result from explain_spam_prediction()
+    show_text : bool
+        Whether to show the email text
+    email_text : str
+        Optional email text to display
+    """
+    if show_text and email_text:
+        print("\n📧 Email Preview:")
+        preview = email_text[:300] + "..." if len(email_text) > 300 else email_text
+        print(f"   {preview}")
+        print()
+    
+    print(f"📊 PREDICTION: {explanation['prediction']}")
+    print(f"   Confidence: {explanation['confidence']:.1%}")
+    print(f"   Spam Probability: {explanation['spam_probability']:.1%}")
+    print(f"   Ham Probability: {explanation['ham_probability']:.1%}")
+    print()
+    
+    print(f"📈 OVERALL SCORING:")
+    print(f"   Total Spam Indicators Score: {explanation['spam_score']:.4f}")
+    print(f"   Total Ham Indicators Score: {explanation['ham_score']:.4f}")
+    print(f"   Features Found in Email: {explanation['total_features_found']}")
+    print()
+    
+    print(f"🎯 TOP {len(explanation['top_features'])} MOST INFLUENTIAL WORDS:")
+    print("-"*80)
+    
+    spam_words = [f for f in explanation['top_features'] if f['direction'] == 'SPAM']
+    ham_words = [f for f in explanation['top_features'] if f['direction'] == 'HAM']
+    
+    if spam_words:
+        print("\n📧 Words pushing towards SPAM:")
+        for i, feat in enumerate(spam_words, 1):
+            bar_length = int(abs(feat['contribution']) * 20)
+            bar = '█' * min(bar_length, 40)
+            print(f"   {i:2d}. '{feat['word']:<20s}' {bar} {feat['contribution']:+.4f}")
+    
+    if ham_words:
+        print("\n✅ Words pushing towards HAM (Legitimate):")
+        for i, feat in enumerate(ham_words, 1):
+            bar_length = int(abs(feat['contribution']) * 20)
+            bar = '█' * min(bar_length, 40)
+            print(f"   {i:2d}. '{feat['word']:<20s}' {bar} {feat['contribution']:.4f}")
+    
+    print()
+    
+    # Interpretation help
+    if explanation['prediction'] == 'SPAM':
+        if explanation['spam_score'] > explanation['ham_score'] * 2:
+            print("💡 Strong spam indicators detected. This email has multiple spam-like features.")
+        else:
+            print("💡 Moderate spam indicators. Some words suggest this might be spam.")
+    else:
+        if explanation['ham_score'] > explanation['spam_score'] * 2:
+            print("💡 Strong legitimate indicators. This email has features typical of legitimate emails.")
+        else:
+            print("💡 Appears legitimate, but with some caution warranted.")
+    print()
+
+
+def classify_email_with_reasoning(email_text, spam_model, spam_vectorizer, 
+                                   phishing_model, phishing_vectorizer, 
+                                   show_reasoning=True, n_features=10):
+    """
+    Enhanced classification that includes reasoning for the spam detection.
+    
+    Parameters:
+    -----------
+    email_text : str
+        The email to classify
+    spam_model, spam_vectorizer : Spam detection model and vectorizer
+    phishing_model, phishing_vectorizer : Phishing classification model and vectorizer
+    show_reasoning : bool
+        Whether to generate and display reasoning
+    n_features : int
+        Number of top features to show in reasoning
+    
+    Returns:
+    --------
+    dict : Classification result with optional reasoning
+    """
+    # Get normal classification
+    result = classify_email(email_text, spam_model, spam_vectorizer, 
+                          phishing_model, phishing_vectorizer)
+    
+    if show_reasoning:
+        result['reasoning'] = explain_spam_prediction(email_text, spam_model, spam_vectorizer, n_features)
+    
+    return result
+
+
+def display_result_with_reasoning(result):
+    """
+    Display classification results with reasoning if available.
+    """
+    # Display normal result
+    display_result(result)
+    
+    # Display reasoning if available
+    if 'reasoning' in result:
+        display_spam_explanation(result['reasoning'], show_text=False)
