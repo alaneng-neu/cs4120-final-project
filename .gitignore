@@ -1,4 +1,7 @@
-.vscode/
+# Models
+models/
+
+# Python
 __pycache__/
-.DS_Store
-*.egg-info/
+*.pyc
+.ipynb_checkpoints/
